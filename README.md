@@ -2,6 +2,8 @@
 
 CloudInit Builder is a portable Windows utility that automates the creation of `cloud-init.iso` files and validates them against a lightweight virtual machine. It was designed to streamline VeloCloud testing workflows, but it works for any cloud-init payload you want to inject into a VM.
 
+> **Compatibility note:** The automated smoke test has been validated end-to-end with VeloCloud software release **4.5.0**. Older or newer versions may work, but they have not been exercised yet.
+
 The executable ships as a single file. When run, it pulls down self-contained copies of Podman and QEMU, keeps them in the same working directory, and never touches system-wide installations or the registry.
 
 ## Requirements
@@ -9,12 +11,12 @@ The executable ships as a single file. When run, it pulls down self-contained co
 - 64-bit Windows 10/11 with virtualization enabled in firmware.
 - Internet access on first run (for downloading portable Podman, Debian container layers, and QEMU).
 - A base QCOW2 disk image placed at `images/velocloud.qcow2` (create the folder if it does not exist yet).
-- Validated with VeloCloud 4.5.0; other software versions have not been smoke-tested yet.
+- Tested against VeloCloud 4.5.0; other software versions are unverified.
 
 ## Quick Start
 
 1. Create an empty folder and copy `cloudinit-builder.exe` into it.
-2. Add your base image at `images/velocloud.qcow2`.
+2. Add your base image at `images/velocloud.qcow2` (ensure it was built from VeloCloud 4.5.0 to match the validated scenario).
 3. Double-click the executable (or run it without arguments from PowerShell).
 4. Choose **Build cloud-init ISO** to produce `images/cloud-init.iso`.
 5. (Optional) choose **Jalankan VM test** to boot the generated ISO against a cloned disk.
