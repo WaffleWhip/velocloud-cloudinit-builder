@@ -1,96 +1,65 @@
 # CloudInit Builder
 
-Portable Windows utility for producing `cloud-init.iso` images and validating them against a lightweight QEMU smoke test—no installers, admin rights, or external dependencies required.
+CloudInit Builder is a portable Windows utility that automates the creation of `cloud-init.iso` files and validates them against a lightweight virtual machine. It was designed to streamline VeloCloud testing workflows, but it works for any cloud-init payload you want to inject into a VM.
 
-## Highlights
+The executable ships as a single file. When run, it pulls down self-contained copies of Podman and QEMU, keeps them in the same working directory, and never touches system-wide installations or the registry.
 
-- **Self-contained toolchain** – Downloads portable Podman and QEMU builds into the working directory and keeps them isolated from the rest of the system.
-- **Guided workflow** – Launch the executable and follow the interactive menu to build the ISO, run a VM test, or clean everything up. No CLI knowledge needed.
-- **Disposable VM disks** – The base QCOW2 image in `images/` is never mutated; every test run clones it into `runtime/vm/` and removes the clone once QEMU exits.
-- **One-click clean-up** – Uninstall menu option shuts down the Podman machine, wipes generated artifacts, and optionally deletes the executable itself.
+## Requirements
 
-## Getting Started
+- 64-bit Windows 10/11 with virtualization enabled in firmware.
+- Internet access on first run (for downloading portable Podman, Debian container layers, and QEMU).
+- A base QCOW2 disk image placed at `images/velocloud.qcow2` (create the folder if it does not exist yet).
+- Validated with VeloCloud 4.5.0; other software versions have not been smoke-tested yet.
 
-1. **Download & prepare**
-   - Copy `cloudinit-builder.exe` into an empty folder on your Windows workstation.
-   - Place your reference QCOW2 disk at `images/velocloud.qcow2` (create the `images/` folder if it does not yet exist). The first ISO build will also generate default templates under `templates/`—edit them after the initial run if you need custom cloud-init data.
+## Quick Start
 
-2. **Launch the application**
-   - Double-click `cloudinit-builder.exe` (or run it without arguments). You will see an interactive menu:
-     ```
-     1) Build cloud-init ISO
-     2) Run VM smoke test
-     3) Uninstall & clean up
-     4) Exit
-     ```
+1. Create an empty folder and copy `cloudinit-builder.exe` into it.
+2. Add your base image at `images/velocloud.qcow2`.
+3. Double-click the executable (or run it without arguments from PowerShell).
+4. Choose **Build cloud-init ISO** to produce `images/cloud-init.iso`.
+5. (Optional) choose **Jalankan VM test** to boot the generated ISO against a cloned disk.
 
-3. **Build the ISO (Menu 1)**
-   - The tool ensures the directory structure exists, downloads portable Podman if needed, and runs `genisoimage` inside a Debian container. The result is written to `images/cloud-init.iso`. Build logs are stored in `logs/build-*.txt`.
-   - After a successful build the menu offers to run the VM smoke test immediately.
+The interactive menu is intentionally simple. Prompts are shown in Indonesian, but the actions are self-explanatory:
 
-4. **Run the VM smoke test (Menu 2 or post-build prompt)**
-   - QEMU portable is downloaded on first use (cached afterwards).
-   - The base QCOW2 disk is cloned into `runtime/vm/velocloud-<timestamp>.qcow2`, attached to QEMU together with `images/cloud-init.iso`, and booted with 4 GiB RAM, two vCPUs, and a single NAT-backed virtio NIC (DHCP enabled).
-   - The temporary clone is deleted automatically once QEMU exits. Console output is captured under `logs/test-*.txt`.
-   - When asked for a VM executable path, press **Enter** to use the bundled QEMU or provide a custom path if preferred.
+```
+=== CloudInit Builder ===
+1) Build cloud-init ISO
+2) Jalankan VM test
+3) Uninstall & bersihkan
+4) Keluar
+Pilih menu [1-4]:
+```
 
-5. **Uninstall / clean (Menu 3)**
-   - Stops and deletes the CloudInit Builder Podman machine.
-   - Removes `tools/`, `images/`, `runtime/`, `cache/`, `templates/`, and—after logging—`logs/`.
-   - When launched via CLI you may add `--self-delete` to remove the executable after cleanup.
+## Workflow Overview
 
-6. **Exit (Menu 4)** – Simply closes the application.
+- **Build cloud-init ISO**  
+  Ensures the folders `templates/`, `images/`, `runtime/`, `tools/`, `cache/`, and `logs/` exist. Downloads portable Podman as needed, starts a dedicated Podman machine, pulls the Debian Bookworm image, installs `genisoimage`, and writes `images/cloud-init.iso` from `templates/user-data.txt` and `templates/meta-data.txt`.
 
-> Tip: hold **Shift + Right Click** inside the working folder and choose “Open PowerShell window here” if you want to run the executable with flags (see below) while still benefiting from the interactive menu.
+- **Jalankan VM test**  
+  Downloads a portable QEMU bundle the first time you run it (cached afterwards). The base QCOW2 is copied into `runtime/vm/velocloud-<timestamp>.qcow2`, attached together with `images/cloud-init.iso`, and launched with 4 GiB RAM, two vCPUs, NAT networking, and a virtio NIC. The cloned disk is deleted automatically when QEMU exits.
 
-## Optional CLI & Flags
+- **Uninstall & bersihkan**  
+  Stops the Podman machine, removes `tools/`, `images/`, `runtime/`, `cache/`, `templates/`, and `logs/`, and optionally deletes the executable when invoked via CLI with `--self-delete`.
 
-Although the interactive menu is the recommended experience, the binary still exposes the original commands:
+Every operation writes a timestamped log under `logs/` (for example `logs/build-20241023-134500.txt`).
+
+## Command-Line Reference
+
+The executable also exposes explicit commands for automation or CI:
 
 ```text
 cloudinit-builder [-q|--quiet] build
-cloudinit-builder [-q|--quiet] test [--vm "<path-to-vm-executable>"] [-- <extra-qemu-args>]
+cloudinit-builder [-q|--quiet] test [--vm <path-to-portable-vm>] [-- <extra-vm-args>]
 cloudinit-builder [-q|--quiet] uninstall [--self-delete]
 ```
 
-- `-q/--quiet` suppresses console status output (logs remain unchanged).
-- `--vm` lets you point the smoke test to another hypervisor executable.
-- Additional arguments after `--` are forwarded to the VM executable.
+- `-q/--quiet` suppresses console progress messages while keeping log files intact.
+- `test --vm` lets you supply a custom VM executable instead of the bundled QEMU.
+- Extra arguments after `--` are passed directly to the VM executable.
 
-## Configuration Knobs
+## Template Customization
 
-| Environment Variable | Purpose | Default |
-| -------------------- | ------- | ------- |
-| `CLOUDINIT_BUILDER_QEMU_ACCEL` | Override the QEMU accelerator (e.g. `whpx`, `tcg`, `kvm`). | `tcg` |
-
-Example:
-
-```powershell
-$env:CLOUDINIT_BUILDER_QEMU_ACCEL = "whpx"
-cloudinit-builder.exe
-```
-
-## Directory Layout
-
-```
-./
-|-- cloudinit-builder.exe
-|-- tools/
-|   |-- podman/…
-|   `-- qemu/…
-|-- templates/
-|   |-- user-data.txt
-|   `-- meta-data.txt
-|-- images/
-|   |-- velocloud.qcow2        (base disk you provide)
-|   `-- cloud-init.iso         (generated output)
-|-- runtime/
-|   `-- vm/                    (temporary QCOW clones)
-|-- cache/                     (downloaded ZIP archives)
-`-- logs/
-```
-
-## Template Defaults
+The first `build` run generates default templates if they are not present.
 
 `templates/meta-data.txt`
 ```
@@ -107,4 +76,56 @@ chpasswd: {expire: False}
 ssh_pwauth: True
 ```
 
-Feel free to edit these files before rebuilding the ISO to fit your deployment scenario.
+Edit these files before rebuilding the ISO to inject custom users, SSH keys, configuration snippets, or cloud-init modules required by your lab.
+
+## Directory Layout
+
+```
+./
+|-- cloudinit-builder.exe
+|-- cache/                     (downloaded ZIP archives)
+|-- images/
+|   |-- velocloud.qcow2        (base disk you provide)
+|   `-- cloud-init.iso         (generated ISO)
+|-- logs/                      (operation transcripts)
+|-- runtime/
+|   `-- vm/                    (temporary QCOW clones)
+|-- templates/
+|   |-- user-data.txt
+|   `-- meta-data.txt
+`-- tools/
+    |-- podman/...
+    `-- qemu/...
+```
+
+You can move the entire folder to another machine and continue working; the tool reuses cached binaries if they are already present.
+
+## Configuration Options
+
+| Environment Variable              | Description                                               | Default |
+|----------------------------------|-----------------------------------------------------------|---------|
+| `CLOUDINIT_BUILDER_QEMU_ACCEL`   | Override the QEMU accelerator (`tcg`, `whpx`, `kvm`, ...) | `tcg`   |
+
+Example (enable WHPX if available):
+
+```powershell
+$env:CLOUDINIT_BUILDER_QEMU_ACCEL = "whpx"
+cloudinit-builder.exe test
+```
+
+## Troubleshooting
+
+- **Podman fails to start**: Ensure Hyper-V or WSL2 is enabled; Podman machine management requires at least one virtualization backend.
+- **VM window closes immediately**: Check `logs/test-*.txt` for QEMU output. Invalid cloud-init syntax or missing ISO usually shows up there.
+- **Download errors**: Verify that outbound HTTPS traffic is allowed. Re-running the same action safely retries the download and resumes cached artifacts.
+- **Wrong base disk path**: Confirm that `images/velocloud.qcow2` exists and is a regular file; the tool will refuse to overwrite it.
+
+## Building from Source
+
+The repository includes the Go sources that produce `cloudinit-builder.exe`. To build your own binary:
+
+```powershell
+go build -o cloudinit-builder.exe ./cmd/cloudinit-builder
+```
+
+The generated executable is fully self-contained and can replace the prebuilt binary included in this project folder.
